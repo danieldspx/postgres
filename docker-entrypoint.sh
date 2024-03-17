@@ -2,6 +2,13 @@
 set -Eeo pipefail
 # TODO swap to -Eeuo pipefail above (after handling all potentially-unset variables)
 
+# Build postgres incrementally with Meson
+build_postgres() {
+  cd /postgres-source/build
+  ninja 1> /dev/null
+  ninja install 1> /dev/null
+}
+
 # usage: file_env VAR [DEFAULT]
 #    ie: file_env 'XYZ_DB_PASSWORD' 'example'
 # (will allow for "$XYZ_DB_PASSWORD_FILE" to fill in the value of
@@ -309,6 +316,8 @@ _main() {
 		# setup data directories and permissions (when run as root)
 		docker_create_db_directories
 		if [ "$(id -u)" = '0' ]; then
+      # build postgres from source with Meson
+      build_postgres
 			# then restart script as postgres user
 			exec gosu postgres "$BASH_SOURCE" "$@"
 		fi

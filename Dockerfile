@@ -2,7 +2,7 @@ FROM debian:bookworm
 
 WORKDIR /postgres-source
 
-RUN apt update && apt install build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev libxml2-utils xsltproc ccache pkg-config -y
+RUN apt update && apt install build-essential libreadline-dev zlib1g-dev flex bison libxml2-dev libxslt-dev libssl-dev python3 pipx libxml2-utils xsltproc ccache pkg-config -y
 
 # explicitly set user/group IDs
 RUN set -eux; \
@@ -65,26 +65,29 @@ ENV LANG en_US.utf8
 RUN mkdir /docker-entrypoint-initdb.d
 
 ENV PG_MAJOR 16
-ENV PATH $PATH:/usr/lib/postgresql/$PG_MAJOR/bin:/usr/local/bin
+ENV PATH $PATH:/usr/lib/postgresql/$PG_MAJOR/bin:/usr/local/bin:/root/.local/bin:/usr/bin
+ENV PIPX_HOME /opt/pipx 
+ENV PIPX_BIN_DIR /usr/local/bin
+
+RUN pipx ensurepath
+RUN pipx install meson
+RUN pipx install ninja
 
 COPY . .
-
-# Estou tendo problema aqui, quem sabe extrair o postgres e tentar dnv ou tacar o erro no google
-RUN ./configure --without-icu --prefix=/usr/lib/postgresql/$PG_MAJOR/
-RUN make
-RUN make install 
-# RUN ./install.sh
 
 RUN mkdir -p /var/run/postgresql && chown -R postgres:postgres /var/run/postgresql && chmod 3777 /var/run/postgresql
 
 ENV PGDATA /var/lib/postgresql/data
+
 # this 1777 will be replaced by 0700 at runtime (allows semi-arbitrary "--user" values)
 RUN mkdir -p "$PGDATA" && chown -R postgres:postgres "$PGDATA" && chmod 1777 "$PGDATA"
 VOLUME /var/lib/postgresql/data
 
-RUN chmod +x docker-entrypoint.sh docker-ensure-initdb.sh
 COPY ./docker-entrypoint.sh ./docker-ensure-initdb.sh /usr/local/bin/
 RUN ln -sT docker-ensure-initdb.sh /usr/local/bin/docker-enforce-initdb.sh
+
+RUN meson setup build --prefix=/usr/lib/postgresql/$PG_MAJOR
+
 ENTRYPOINT ["docker-entrypoint.sh"]
 
 # We set the default STOPSIGNAL to SIGINT, which corresponds to what PostgreSQL
