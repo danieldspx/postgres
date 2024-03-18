@@ -7,6 +7,7 @@ build_postgres() {
   cd /postgres-source/build
   ninja 1> /dev/null
   ninja install 1> /dev/null
+  echo "Build performed"
 }
 
 # usage: file_env VAR [DEFAULT]
