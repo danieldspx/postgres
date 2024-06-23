@@ -260,6 +260,7 @@ secure_write(Port *port, void *ptr, size_t len)
 	ssize_t		n;
 	int			waitfor;
 
+	elog(LOG, "secure_write");
 	/* Deal with any already-pending interrupt condition. */
 	ProcessClientWriteInterrupt(false);
 
@@ -334,6 +335,7 @@ secure_raw_write(Port *port, const void *ptr, size_t len)
 #ifdef WIN32
 	pgwin32_noblock = true;
 #endif
+	elog(LOG, "secure_raw_write: %d %s", (int) port->sock, (const char*) ptr);
 	n = send(port->sock, ptr, len, 0);
 #ifdef WIN32
 	pgwin32_noblock = false;

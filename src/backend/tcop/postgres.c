@@ -1069,7 +1069,7 @@ exec_simple_query(const char *query_string)
 	if (check_log_statement(parsetree_list))
 	{
 		ereport(LOG,
-				(errmsg("statement: %s", query_string),
+				(errmsg("[DANDEBUG] statement: %s", query_string),
 				 errhidestmt(true),
 				 errdetail_execute(parsetree_list)));
 		was_logged = true;
@@ -1118,6 +1118,7 @@ exec_simple_query(const char *query_string)
 		 */
 		commandTag = CreateCommandTag(parsetree->stmt);
 		cmdtagname = GetCommandTagNameAndLen(commandTag, &cmdtaglen);
+		elog(LOG, "[DANDEBUG] cmdtagname: %c", cmdtagname);
 
 		set_ps_display_with_len(cmdtagname, cmdtaglen);
 
@@ -1240,6 +1241,7 @@ exec_simple_query(const char *query_string)
 		 * --- but it avoids grottiness in other places.  Ah, the joys of
 		 * backward compatibility...)
 		 */
+		// Destination Format
 		format = 0;				/* TEXT is default */
 		if (IsA(parsetree->stmt, FetchStmt))
 		{
@@ -1254,12 +1256,14 @@ exec_simple_query(const char *query_string)
 					format = 1; /* BINARY */
 			}
 		}
+		elog(LOG, "Exec with Format: %d", (int) format);
 		PortalSetResultFormat(portal, 1, &format);
 
 		/*
 		 * Now we can create the destination receiver object.
 		 */
 		receiver = CreateDestReceiver(dest);
+		elog(LOG, "Dest is Remote?: %d", (int) dest == DestRemote);
 		if (dest == DestRemote)
 			SetRemoteDestReceiverParams(receiver, portal);
 
@@ -1279,6 +1283,7 @@ exec_simple_query(const char *query_string)
 						 receiver,
 						 &qc);
 
+		ereport(LOG, (errmsg("[DANDEBUG] After portal run")));
 		receiver->rDestroy(receiver);
 
 		PortalDrop(portal, false);
@@ -2343,6 +2348,7 @@ exec_execute_message(const char *portal_name, long max_rows)
 static bool
 check_log_statement(List *stmt_list)
 {
+	return true;
 	ListCell   *stmt_item;
 
 	if (log_statement == LOGSTMT_NONE)
@@ -4616,6 +4622,8 @@ PostgresMain(const char *dbname, const char *username)
 		if (ignore_till_sync && firstchar != EOF)
 			continue;
 
+
+		elog(LOG, "Command Read: %c", firstchar);
 		switch (firstchar)
 		{
 			case 'Q':			/* simple query */

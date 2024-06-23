@@ -30,6 +30,7 @@
  *	however.
  * ---------------------
  */
+// Query Descriptor
 typedef struct QueryDesc
 {
 	/* These fields are provided by CreateQueryDesc */

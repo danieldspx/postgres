@@ -286,10 +286,11 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
  *		retrieved tuples, not for instance to those inserted/updated/deleted
  *		by a ModifyTable plan node.
  *
- *		There is no return value, but output tuples (if any) are sent to
+ *  What are tuples?
+ *		There is no return value, but **output tuples (if any) are sent to
  *		the destination receiver specified in the QueryDesc; and the number
  *		of tuples processed at the top level can be found in
- *		estate->es_processed.  The total number of tuples processed in all
+ *		estate->es_processed**.  The total number of tuples processed in all
  *		the ExecutorRun calls can be found in estate->es_total_processed.
  *
  *		We provide a function hook variable that lets loadable plugins
@@ -1698,6 +1699,7 @@ ExecutePlan(EState *estate,
 			 * has closed and no more tuples can be sent. If that's the case,
 			 * end the loop.
 			 */
+				elog(LOG, "Destination is receiving tuple");
 			if (!dest->receiveSlot(slot, dest))
 				break;
 		}

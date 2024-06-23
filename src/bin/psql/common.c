@@ -12,6 +12,8 @@
 #include <math.h>
 #include <pwd.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
 #ifndef WIN32
 #include <unistd.h>				/* for write() */
 #else
@@ -701,6 +703,7 @@ PrintQueryTuples(const PGresult *result, const printQueryOpt *opt,
 	bool		ok = true;
 	FILE	   *fout = printQueryFout ? printQueryFout : pset.queryFout;
 
+	printf("PrintQueryTuples\n");
 	printQuery(result, opt ? opt : &pset.popt, fout, false, pset.logfile);
 	fflush(fout);
 	if (ferror(fout))
@@ -964,6 +967,7 @@ PrintQueryResult(PGresult *result, bool last,
 	bool		success;
 	const char *cmdstatus;
 
+	printf("PrintQueryResult\n");
 	if (!result)
 		return false;
 
@@ -1426,15 +1430,20 @@ ExecQueryAndProcessResults(const char *query,
 	FILE	   *gfile_fout = NULL;
 	bool		gfile_is_pipe = false;
 
+	printf("ExecQueryAndProcessResults being processed\n");
+
 	if (timing)
 		INSTR_TIME_SET_CURRENT(before);
 	else
 		INSTR_TIME_SET_ZERO(before);
 
-	if (pset.bind_flag)
+	if (pset.bind_flag) {
+		printf("ExecQueryAndProcessResults>PQsendQueryParams\n");
 		success = PQsendQueryParams(pset.db, query, pset.bind_nparams, NULL, (const char *const *) pset.bind_params, NULL, NULL, 0);
-	else
+	} else {
+		printf("ExecQueryAndProcessResults>PQsendQuery\n");
 		success = PQsendQuery(pset.db, query);
+	}
 
 	if (!success)
 	{

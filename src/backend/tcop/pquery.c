@@ -131,6 +131,7 @@ FreeQueryDesc(QueryDesc *qdesc)
  *
  * Must be called in a memory context that will be reset or deleted on
  * error; otherwise the executor's memory usage will be leaked.
+ * Process query
  */
 static void
 ProcessQuery(PlannedStmt *plan,
@@ -157,6 +158,9 @@ ProcessQuery(PlannedStmt *plan,
 	/*
 	 * Run the plan to completion.
 	 */
+	// Runts the Query Desciptor after all the parameters where
+	// assigned in the struct
+	elog(LOG, "Executor Run");
 	ExecutorRun(queryDesc, ForwardScanDirection, 0, true);
 
 	/*
@@ -702,6 +706,7 @@ PortalRun(Portal portal, long count, bool isTopLevel, bool run_once,
 	if (qc)
 		InitializeQueryCompletion(qc);
 
+	ereport(LOG, (errmsg("[DANDEBUG] PortalRun")));
 	if (log_executor_stats && portal->strategy != PORTAL_MULTI_QUERY)
 	{
 		elog(DEBUG3, "PortalRun");
@@ -746,6 +751,8 @@ PortalRun(Portal portal, long count, bool isTopLevel, bool run_once,
 		PortalContext = portal->portalContext;
 
 		MemoryContextSwitchTo(PortalContext);
+
+		elog(LOG, "portal strategy: %d", (int) portal->strategy);
 
 		switch (portal->strategy)
 		{

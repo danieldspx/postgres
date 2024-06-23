@@ -1293,6 +1293,7 @@ internal_putbytes(const char *s, size_t len)
 {
 	size_t		amount;
 
+	// elog(LOG, "internal_putbytes"); was logging too much
 	while (len > 0)
 	{
 		/* If buffer is full, then flush it out */
@@ -1349,6 +1350,7 @@ internal_flush(void)
 	char	   *bufptr = PqSendBuffer + PqSendStart;
 	char	   *bufend = PqSendBuffer + PqSendPointer;
 
+	elog(LOG, "internal_flush");
 	while (bufptr < bufend)
 	{
 		int			r;
@@ -1473,6 +1475,8 @@ socket_is_send_pending(void)
 static int
 socket_putmessage(char msgtype, const char *s, size_t len)
 {
+	// Maybe here?
+	elog(LOG, "socket_putmessage: %s", s);
 	uint32		n32;
 
 	Assert(msgtype != 0);

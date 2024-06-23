@@ -19,6 +19,8 @@
 
 #include <limits.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #ifndef WIN32
@@ -640,6 +642,8 @@ print_aligned_text(const printTableContent *cont, FILE *fout, bool is_pager)
 	const printTextFormat *format = get_line_style(cont->opt);
 	const printTextLineFormat *dformat = &format->lrule[PRINT_RULE_DATA];
 
+	printf("print_aligned_text\n");
+
 	unsigned int col_count = 0,
 				cell_count = 0;
 
@@ -1022,6 +1026,7 @@ print_aligned_text(const printTableContent *cont, FILE *fout, bool is_pager)
 	/* print cells, one loop per row */
 	for (i = 0, ptr = cont->cells; *ptr; i += col_count, ptr += col_count)
 	{
+		printf("print cells\n");
 		bool		more_lines;
 
 		if (cancel_pressed)
@@ -3431,6 +3436,7 @@ printTable(const printTableContent *cont,
 {
 	bool		is_local_pager = false;
 
+	printf("printTable\n");
 	if (cancel_pressed)
 		return;
 
@@ -3540,6 +3546,8 @@ printQuery(const PGresult *result, const printQueryOpt *opt,
 				r,
 				c;
 
+	printf("printQuery\n");
+
 	if (cancel_pressed)
 		return;
 
@@ -3556,6 +3564,8 @@ printQuery(const PGresult *result, const printQueryOpt *opt,
 							opt->translate_header,
 							column_type_alignment(PQftype(result, i)));
 	}
+
+	printf("rows %d columns %d\n", cont.nrows, cont.ncolumns);
 
 	/* set cells */
 	for (r = 0; r < cont.nrows; r++)

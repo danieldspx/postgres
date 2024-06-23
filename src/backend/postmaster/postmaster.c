@@ -235,7 +235,7 @@ int			PreAuthDelay = 0;
 int			AuthenticationTimeout = 60;
 
 bool		log_hostname;		/* for ps display and logging */
-bool		Log_connections = false;
+bool		Log_connections = true; // Log connections
 bool		Db_user_namespace = false;
 
 bool		enable_bonjour = false;
@@ -1775,12 +1775,13 @@ ServerLoop(void)
 			if (events[i].events & WL_SOCKET_ACCEPT)
 			{
 				Port	   *port;
-
+				ereport(LOG, (errmsg("[DANDEBUG] Conn Created")));
 				port = ConnCreate(events[i].fd);
 				if (port)
 				{
 					BackendStartup(port);
 
+					ereport(LOG, (errmsg("[DANDEBUG] After Backend Startup - Will Close Stream")));
 					/*
 					 * We no longer need the open socket or port structure in
 					 * this process
@@ -3107,7 +3108,7 @@ process_pm_child_exit(void)
 
 			/* at this point we are really open for business */
 			ereport(LOG,
-					(errmsg("database system is ready to accept connections")));
+					(errmsg("database system is ready to accept connections DANIEL")));
 
 			/* Report status */
 			AddToDataDirLockFile(LOCK_FILE_LINE_PM_STATUS, PM_STATUS_READY);
@@ -4117,7 +4118,7 @@ BackendStartup(Port *port)
 {
 	Backend    *bn;				/* for backend cleanup */
 	pid_t		pid;
-
+	ereport(LOG, (errmsg("[DANDEBUG] Backend Startup")));
 	/*
 	 * Create backend data structure.  Better before the fork() so we can
 	 * handle failure cleanly.
@@ -4163,8 +4164,10 @@ BackendStartup(Port *port)
 	bn->bgworker_notify = false;
 
 #ifdef EXEC_BACKEND
+	ereport(LOG, (errmsg("[DANDEBUG] EXEC BACKEND")));
 	pid = backend_forkexec(port);
 #else							/* !EXEC_BACKEND */
+	ereport(LOG, (errmsg("[DANDEBUG] !EXEC BACKEND")));
 	pid = fork_process();
 	if (pid == 0)				/* child */
 	{
@@ -4209,7 +4212,7 @@ BackendStartup(Port *port)
 	}
 
 	/* in parent, successful fork */
-	ereport(DEBUG2,
+	ereport(LOG,
 			(errmsg_internal("forked new backend, pid=%d socket=%d",
 							 (int) pid, (int) port->sock)));
 

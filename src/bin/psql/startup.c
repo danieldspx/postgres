@@ -6,6 +6,7 @@
  * src/bin/psql/startup.c
  */
 #include "postgres_fe.h"
+#include <stdio.h>
 
 #ifndef WIN32
 #include <unistd.h>
@@ -458,6 +459,7 @@ error:
 		connection_warnings(true);
 		if (!pset.quiet)
 			printf(_("Type \"help\" for help.\n\n"));
+		printf("Hello its me (danieldspx)\n");
 		initializeInput(options.no_readline ? 0 : 1);
 		successResult = MainLoop(stdin);
 	}

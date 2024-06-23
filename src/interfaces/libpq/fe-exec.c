@@ -13,10 +13,12 @@
  *-------------------------------------------------------------------------
  */
 #include "postgres_fe.h"
+#include "utils/elog.h"
 
 #include <ctype.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
 
 #ifdef WIN32
 #include "win32.h"
@@ -2222,6 +2224,8 @@ getCopyResult(PGconn *conn, ExecStatusType copytype)
 PGresult *
 PQexec(PGconn *conn, const char *query)
 {
+	// elog(LOG, "Estou enviando a query %s\n", query);
+	printf("Estou enviando a query %s\n", query);
 	if (!PQexecStart(conn))
 		return NULL;
 	if (!PQsendQuery(conn, query))
@@ -3430,10 +3434,12 @@ PQfname(const PGresult *res, int field_num)
 {
 	if (!check_field_number(res, field_num))
 		return NULL;
-	if (res->attDescs)
+	if (res->attDescs) {
+		printf("PQfname %s\n", res->attDescs[field_num].name);
 		return res->attDescs[field_num].name;
-	else
+	} else {
 		return NULL;
+	}
 }
 
 /*

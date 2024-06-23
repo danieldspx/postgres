@@ -31,6 +31,8 @@
 #include "postgres_fe.h"
 
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 #ifdef WIN32
@@ -517,6 +519,10 @@ pqPutMsgBytes(const void *buf, size_t len, PGconn *conn)
 int
 pqPutMsgEnd(PGconn *conn)
 {
+	// FILE *f = fopen("/home/daniel.pereira/Documentos/UFSM/tcc/postgres/build/libpq.logs", "a");
+	// fprintf(f, "Send some %s\n", conn->outBuffer);
+	// fclose(f);
+	printf("[LIBPQ] Send some (%s)\n", conn->outBuffer);
 	/* Fill in length word if needed */
 	if (conn->outMsgStart >= 0)
 	{
@@ -543,6 +549,7 @@ pqPutMsgEnd(PGconn *conn)
 	{
 		int			toSend = conn->outCount - (conn->outCount % 8192);
 
+		
 		if (pqSendSome(conn, toSend) < 0)
 			return EOF;
 		/* in nonblock mode, don't complain if unable to send it all */

@@ -132,6 +132,7 @@ pq_sendbytes(StringInfo buf, const void *data, int datalen)
 /* --------------------------------
  *		pq_sendcountedtext - append a counted text string (with character set conversion)
  *
+ * Read the comment below:
  * The data sent to the frontend by this routine is a 4-byte count field
  * followed by the string.  The count includes itself or not, as per the
  * countincludesself flag (pre-3.0 protocol requires it to include itself).
@@ -147,6 +148,7 @@ pq_sendcountedtext(StringInfo buf, const char *str, int slen,
 	char	   *p;
 
 	p = pg_server_to_client(str, slen);
+	elog(LOG, "pq_sendcountedtext: %s %d", p, (int) p != str);
 	if (p != str)				/* actual conversion has been done? */
 	{
 		slen = strlen(p);

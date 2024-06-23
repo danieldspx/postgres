@@ -101,6 +101,7 @@ SetRemoteDestReceiverParams(DestReceiver *self, Portal portal)
 {
 	DR_printtup *myState = (DR_printtup *) self;
 
+	elog(LOG, "Set Remote Dest Receiver");
 	Assert(myState->pub.mydest == DestRemote ||
 		   myState->pub.mydest == DestRemoteExecute);
 
@@ -132,7 +133,10 @@ printtup_startup(DestReceiver *self, int operation, TupleDesc typeinfo)
 	/*
 	 * If we are supposed to emit row descriptions, then send the tuple
 	 * descriptor of the tuples.
+	 * Aqui enviaria algum tipo de row description (https://www.postgresql.org/docs/current/protocol-message-formats.html)
 	 */
+
+	elog(LOG, "Printtup Send Descrip %d", (int) myState->sendDescrip);
 	if (myState->sendDescrip)
 		SendRowDescriptionMessage(&myState->buf,
 								  typeinfo,
@@ -294,7 +298,7 @@ printtup_prepare_info(DR_printtup *myState, TupleDesc typeinfo, int numAttrs)
 }
 
 /* ----------------
- *		printtup --- send a tuple to the client
+ *		printtup --- send a tuple to the client :D
  * ----------------
  */
 static bool
@@ -355,7 +359,12 @@ printtup(TupleTableSlot *slot, DestReceiver *self)
 			char	   *outputstr;
 
 			outputstr = OutputFunctionCall(&thisState->finfo, attr);
+			// Does not send, it only modifies the buf variable
 			pq_sendcountedtext(buf, outputstr, strlen(outputstr), false);
+
+
+			elog(LOG, "Printtup outputstr");
+			elog(LOG, outputstr);
 		}
 		else
 		{
@@ -433,6 +442,7 @@ printatt(unsigned attributeId,
 		   attributeP->attbyval ? 't' : 'f');
 }
 
+// What is an interactive backend?
 /* ----------------
  *		debugStartup - prepare to print tuples for an interactive backend
  * ----------------
