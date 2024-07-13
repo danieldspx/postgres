@@ -5,8 +5,8 @@ set -Eeo pipefail
 # Build postgres incrementally with Meson
 build_postgres() {
   cd /postgres-source/build
-  ninja 1> /dev/null
-  ninja install 1> /dev/null
+  ninja --verbose
+  ninja install --verbose
   echo "Build performed"
 }
 

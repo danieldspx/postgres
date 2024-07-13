@@ -305,6 +305,9 @@ pqsecure_write(PGconn *conn, const void *ptr, size_t len)
 {
 	ssize_t		n;
 
+
+	printf("[LIBPQ][pqsecure_write] Entered method\n");
+
 #ifdef USE_SSL
 	if (conn->ssl_in_use)
 	{
@@ -379,8 +382,10 @@ retry_masked:
 
 	DISABLE_SIGPIPE(conn, spinfo, return -1);
 
+	printf("[LIBPQ][pqsecure_raw_write] Will call send\n");
 	n = send(conn->sock, ptr, len, flags);
 
+	printf("[LIBPQ][pqsecure_raw_write] send called n %ld\n", n);
 	if (n < 0)
 	{
 		result_errno = SOCK_ERRNO;

@@ -163,6 +163,8 @@ exesuffix = '' # overridden below where necessary
 dlsuffix = '.so' # overridden below where necessary
 library_path_var = 'LD_LIBRARY_PATH'
 
+
+msquic_dep = cc.find_library('msquic', dirs: meson.current_source_dir() / 'src/include/msquic/lib', header_include_directories: include_directories('src/include/msquic'), required: true)
 # Format of file to control exports from libraries, and how to pass them to
 # the compiler. For export_fmt @0@ is the path to the file export file.
 export_file_format = 'gnu'
@@ -304,8 +306,10 @@ elif host_system == 'windows'
 
   os_deps += cc.find_library('ws2_32', required: true)
   secur32_dep = cc.find_library('secur32', required: true)
+# postgres_lib_d
   backend_deps += secur32_dep
   libpq_deps += secur32_dep
+  # libpq_deps += msquic_dep
 
   postgres_inc_d += 'src/include/port/win32'
   if cc.get_id() == 'msvc'
@@ -2836,6 +2840,7 @@ libpq_deps += [
   ldap_r,
   libintl,
   ssl,
+  msquic_dep,
 ]
 
 subdir('src/interfaces/libpq')

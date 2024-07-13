@@ -98,6 +98,13 @@ install_headers(
 )
 
 install_headers(
+  'msquic/msquic.h',
+  'msquic/msquic_posix.h',
+  'msquic/quic_sal_stub.h',
+  install_dir: dir_include_internal / 'libpq',
+)
+
+install_headers(
   'c.h',
   'fmgr.h',
   'funcapi.h',

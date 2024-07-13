@@ -19,6 +19,9 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #ifdef WIN32
 #include "win32.h"
@@ -1480,9 +1483,12 @@ PQsendQueryInternal(PGconn *conn, const char *query, bool newQuery)
 	 * Give the data a push.  In nonblock mode, don't complain if we're unable
 	 * to send it all; PQgetResult() will do any additional flushing needed.
 	 */
+
+	printf("[LIBPQ][PQsendQueryInternal] Before flush\n");
 	if (pqFlush(conn) < 0)
 		goto sendFailed;
 
+	printf("[LIBPQ][PQsendQueryInternal] After flush\n");
 	/* OK, it's launched! */
 	pqAppendCmdQueueEntry(conn, entry);
 

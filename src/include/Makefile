@@ -40,6 +40,7 @@ install: all installdirs
 	$(INSTALL_DATA) $(srcdir)/port.h         '$(DESTDIR)$(includedir_internal)'
 	$(INSTALL_DATA) $(srcdir)/postgres_fe.h  '$(DESTDIR)$(includedir_internal)'
 	$(INSTALL_DATA) $(srcdir)/libpq/pqcomm.h '$(DESTDIR)$(includedir_internal)/libpq'
+	$(INSTALL_DATA) $(srcdir)/msquic/*.h '$(DESTDIR)$(includedir_internal)/libpq'
 # These headers are needed for server-side development
 	$(INSTALL_DATA) pg_config.h     '$(DESTDIR)$(includedir_server)'
 	$(INSTALL_DATA) pg_config_ext.h '$(DESTDIR)$(includedir_server)'

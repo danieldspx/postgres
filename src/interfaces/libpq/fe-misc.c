@@ -522,7 +522,8 @@ pqPutMsgEnd(PGconn *conn)
 	// FILE *f = fopen("/home/daniel.pereira/Documentos/UFSM/tcc/postgres/build/libpq.logs", "a");
 	// fprintf(f, "Send some %s\n", conn->outBuffer);
 	// fclose(f);
-	printf("[LIBPQ] Send some (%s)\n", conn->outBuffer);
+	// MAYBE REMOVE LINE BELOW
+	printf("[LIBPQ] Send some (%s)\n", conn->outBuffer + conn->outMsgStart);
 	/* Fill in length word if needed */
 	if (conn->outMsgStart >= 0)
 	{
@@ -545,6 +546,7 @@ pqPutMsgEnd(PGconn *conn)
 	/* Make message eligible to send */
 	conn->outCount = conn->outMsgEnd;
 
+	printf("[LIBPQ] outCount %d %d\n", conn->outCount, conn->outCount >= 8192);
 	if (conn->outCount >= 8192)
 	{
 		int			toSend = conn->outCount - (conn->outCount % 8192);
@@ -795,6 +797,7 @@ pqSendSome(PGconn *conn, int len)
 	int			remaining = conn->outCount;
 	int			result = 0;
 
+	printf("[LIBPQ][pqSendSome] Entered method\n");
 	/*
 	 * If we already had a write failure, we will never again try to send data
 	 * on that connection.  Even if the kernel would let us, we've probably

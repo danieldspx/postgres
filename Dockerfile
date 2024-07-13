@@ -88,7 +88,16 @@ RUN ln -sT docker-ensure-initdb.sh /usr/local/bin/docker-enforce-initdb.sh
 
 RUN meson setup build --prefix=/usr/lib/postgresql/$PG_MAJOR
 
+RUN apt update && apt install libnuma-dev -y
+
+# Create symlinks for the msquic library
+RUN ln -s /postgres-source/src/include/msquic/lib/libmsquic.so.2 /usr/lib/libmsquic.so.2 \
+    && ln -s /postgres-source/src/include/msquic/lib/libmsquic.so.2 /usr/lib/libmsquic.so
+#
+# ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/postgres-source/src/include/msquic/lib:$LD_LIBRARY_PATH
+
 ENTRYPOINT ["docker-entrypoint.sh"]
+# ENTRYPOINT ["tail", "-f", "/dev/null"]
 
 # We set the default STOPSIGNAL to SIGINT, which corresponds to what PostgreSQL
 # calls "Fast Shutdown mode" wherein new connections are disallowed and any

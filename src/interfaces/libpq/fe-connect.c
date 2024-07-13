@@ -15,12 +15,17 @@
 
 #include "postgres_fe.h"
 
+#include <stdio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <ctype.h>
 #include <netdb.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "msquic_posix.h"
+#include "quic_sal_stub.h"
+#include "msquic.h"
 
 #include "common/ip.h"
 #include "common/link-canary.h"
@@ -384,6 +389,16 @@ static const PQEnvironmentOption EnvironmentOptions[] =
 	}
 };
 
+/*
+ * QUIC Variables
+ */
+
+//
+// The QUIC API/function table returned from MsQuicOpen2. It contains all the
+// functions called by the app to interact with MsQuic.
+//
+const QUIC_API_TABLE* MsQuic;
+
 /* The connection URI must start with either of the following designators: */
 static const char uri_designator[] = "postgresql://";
 static const char short_uri_designator[] = "postgres://";
@@ -681,6 +696,14 @@ PQconnectdbParams(const char *const *keywords,
 {
 	PGconn	   *conn = PQconnectStartParams(keywords, values, expand_dbname);
 
+
+	printf("[LIBPQ][PQconnectdbParams] Entering with info %s %s\n", keywords, values);
+
+	MsQuicOpen2(&MsQuic);
+
+	printf("[LIBPQ][PQconnectStart] MsQuic %p\n", MsQuic);
+
+
 	if (conn && conn->status != CONNECTION_BAD)
 		(void) connectDBComplete(conn);
 
@@ -734,6 +757,7 @@ PQconnectdb(const char *conninfo)
 {
 	PGconn	   *conn = PQconnectStart(conninfo);
 
+	printf("[LIBPQ][PQconnectdb] Entering with info %s\n", conninfo);
 	if (conn && conn->status != CONNECTION_BAD)
 		(void) connectDBComplete(conn);
 
@@ -783,6 +807,9 @@ PQconnectStartParams(const char *const *keywords,
 {
 	PGconn	   *conn;
 	PQconninfoOption *connOptions;
+
+
+	printf("[LIBPQ][PQconnectStartParams] Entering\n");
 
 	/*
 	 * Allocate memory for the conn structure.  Note that we also expect this
@@ -860,7 +887,10 @@ PQconnectStartParams(const char *const *keywords,
 PGconn *
 PQconnectStart(const char *conninfo)
 {
+
 	PGconn	   *conn;
+
+	
 
 	/*
 	 * Allocate memory for the conn structure.  Note that we also expect this

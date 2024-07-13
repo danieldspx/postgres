@@ -82,7 +82,8 @@ endif
 # matter.)  Note that we filter out -lpgcommon and -lpgport from LIBS and
 # instead link with -lpgcommon_shlib and -lpgport_shlib, to get object files
 # that are built correctly for use in a shlib.
-SHLIB_LINK_INTERNAL = -lpgcommon_shlib -lpgport_shlib
+LIBMSQUIC_DIR = $(top_srcdir)/src/include/msquic/lib
+SHLIB_LINK_INTERNAL = -lpgcommon_shlib -lpgport_shlib -L$(LIBMSQUIC_DIR) -lmsquic
 ifneq ($(PORTNAME), win32)
 SHLIB_LINK += $(filter -lcrypt -ldes -lcom_err -lcrypto -lk5crypto -lkrb5 -lgssapi_krb5 -lgss -lgssapi -lssl -lsocket -lnsl -lresolv -lintl -lm, $(LIBS)) $(LDAP_LIBS_FE) $(PTHREAD_LIBS)
 else
@@ -91,6 +92,7 @@ endif
 ifeq ($(PORTNAME), win32)
 SHLIB_LINK += -lshell32 -lws2_32 -lsecur32 $(filter -leay32 -lssleay32 -lcomerr32 -lkrb5_32, $(LIBS))
 endif
+
 SHLIB_PREREQS = submake-libpgport
 
 SHLIB_EXPORTS = exports.txt
