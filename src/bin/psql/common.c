@@ -1430,7 +1430,7 @@ ExecQueryAndProcessResults(const char *query,
 	FILE	   *gfile_fout = NULL;
 	bool		gfile_is_pipe = false;
 
-	printf("ExecQueryAndProcessResults being processed\n");
+	printf("ExecQueryAndProcessResults being processed: %s\n", query);
 
 	if (timing)
 		INSTR_TIME_SET_CURRENT(before);
@@ -1441,7 +1441,8 @@ ExecQueryAndProcessResults(const char *query,
 		printf("ExecQueryAndProcessResults>PQsendQueryParams\n");
 		success = PQsendQueryParams(pset.db, query, pset.bind_nparams, NULL, (const char *const *) pset.bind_params, NULL, NULL, 0);
 	} else {
-		printf("ExecQueryAndProcessResults>PQsendQuery\n");
+		printf("ExecQueryAndProcessResults>PQsendQuery - Host: %s\n", PQhost(pset.db));
+		
 		success = PQsendQuery(pset.db, query);
 	}
 

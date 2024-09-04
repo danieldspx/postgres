@@ -837,6 +837,7 @@ pqSendSome(PGconn *conn, int len)
 		int			sent;
 
 #ifndef WIN32
+		printf("[LIBPQ][pqSendSome] ptr: %s len %d\n", ptr, len);
 		sent = pqsecure_write(conn, ptr, len);
 #else
 

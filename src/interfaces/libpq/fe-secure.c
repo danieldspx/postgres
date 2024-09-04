@@ -22,6 +22,10 @@
 #include <fcntl.h>
 #include <ctype.h>
 
+#include "msquic_posix.h"
+#include "quic_sal_stub.h"
+#include "msquic.h"
+
 #ifdef WIN32
 #include "win32.h"
 #else
@@ -360,8 +364,53 @@ pqsecure_raw_write(PGconn *conn, const void *ptr, size_t len)
 	int			result_errno = 0;
 	char		msgbuf[1024];
 	char		sebuf[PG_STRERROR_R_BUFLEN];
+	uint8_t* SendBufferRaw;
+	QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+	QUIC_BUFFER* SendBuffer;
 
 	DECLARE_SIGPIPE_INFO(spinfo);
+
+
+	//
+	// Allocates and builds the buffer to send over the stream.
+	//
+	size_t bufferLen = sizeof(QUIC_BUFFER) + len;
+
+	SendBufferRaw = (uint8_t*)malloc(bufferLen);
+	if (SendBufferRaw == NULL) {
+		printf("SendBuffer allocation failed!\n");
+		Status = QUIC_STATUS_OUT_OF_MEMORY;
+		conn->MsQuic->ConnectionShutdown(conn->ClientConnection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+	}
+	SendBuffer = (QUIC_BUFFER*)SendBufferRaw;
+	SendBuffer->Buffer = SendBufferRaw + sizeof(QUIC_BUFFER);
+	SendBuffer->Length = bufferLen;
+
+	// Initialize the buffer with the string "QSELECT"
+	memcpy(SendBuffer->Buffer, ptr, len);
+
+	printf("[strm][%p] Sending data...\n", conn->Stream);
+
+	// printf("Data being sent: ");
+	// for (size_t i = 0; i < nread; i++) {
+	//   printf("%c(%02x) ", SendBuffer->Buffer[i], SendBuffer->Buffer[i]);
+	// }
+	// printf("\n");
+
+	//
+	// Sends the buffer over the stream. Note the FIN flag is passed along with
+	// the buffer. This indicates this is the last buffer on the stream and the
+	// the stream is shut down (in the send direction) immediately after.
+	//
+	if (QUIC_FAILED(Status = conn->MsQuic->StreamSend(conn->Stream, SendBuffer, 1, QUIC_SEND_FLAG_NONE, SendBuffer))) {
+		printf("StreamSend failed, 0x%x!\n", Status);
+	}
+
+	printf("Data send\n"); 
+
+	if (QUIC_FAILED(Status)) {
+		conn->MsQuic->ConnectionShutdown(conn->ClientConnection, QUIC_CONNECTION_SHUTDOWN_FLAG_NONE, 0);
+	}
 
 	/*
 	 * If we already had a write failure, we will never again try to send data

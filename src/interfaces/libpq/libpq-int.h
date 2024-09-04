@@ -22,6 +22,9 @@
 
 /* We assume libpq-fe.h has already been included. */
 #include "libpq-events.h"
+#include "msquic_posix.h"
+#include "quic_sal_stub.h"
+#include "msquic.h"
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -479,7 +482,7 @@ struct pg_conn
 	bool		client_finished_auth;	/* have we finished our half of the
 										 * authentication exchange? */
 
-
+	
 	/* Transient state needed while establishing connection */
 	PGTargetServerType target_server_type;	/* desired session properties */
 	PGLoadBalanceType load_balance_type;	/* desired load balancing
@@ -621,6 +624,20 @@ struct pg_conn
 
 	/* Buffer for receiving various parts of messages */
 	PQExpBufferData workBuffer; /* expansible string */
+
+	/* MsQuic Structures */
+	QUIC_API_TABLE* MsQuic;
+	//
+	// The QUIC handle to the configuration object. This object abstracts the
+	// connection configuration. This includes TLS configuration and any other
+	// QUIC layer settings.
+	//
+	HQUIC Configuration;
+
+	// Client Variables
+	HQUIC ClientConnection;
+	HQUIC Registration;
+	HQUIC Stream;
 };
 
 /* PGcancel stores all data necessary to cancel a connection. A copy of this

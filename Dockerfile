@@ -86,13 +86,14 @@ VOLUME /var/lib/postgresql/data
 COPY ./docker-entrypoint.sh ./docker-ensure-initdb.sh /usr/local/bin/
 RUN ln -sT docker-ensure-initdb.sh /usr/local/bin/docker-enforce-initdb.sh
 
+# Create symlinks for the msquic library
+RUN ln -s /postgres-source/src/include/msquic/lib/libmsquic.so.2.3.5 /usr/lib/libmsquic.so.2 \
+    && ln -s /postgres-source/src/include/msquic/lib/libmsquic.so.2.3.5 /usr/lib/libmsquic.so
+
 RUN meson setup build --prefix=/usr/lib/postgresql/$PG_MAJOR
 
 RUN apt update && apt install libnuma-dev -y
 
-# Create symlinks for the msquic library
-RUN ln -s /postgres-source/src/include/msquic/lib/libmsquic.so.2 /usr/lib/libmsquic.so.2 \
-    && ln -s /postgres-source/src/include/msquic/lib/libmsquic.so.2 /usr/lib/libmsquic.so
 #
 # ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/postgres-source/src/include/msquic/lib:$LD_LIBRARY_PATH
 

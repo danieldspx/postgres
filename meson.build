@@ -164,7 +164,7 @@ dlsuffix = '.so' # overridden below where necessary
 library_path_var = 'LD_LIBRARY_PATH'
 
 
-msquic_dep = cc.find_library('msquic', dirs: meson.current_source_dir() / 'src/include/msquic/lib', header_include_directories: include_directories('src/include/msquic'), required: true)
+msquic_dep = cc.find_library('msquic', header_include_directories: include_directories('src/include/msquic'), required: true)
 # Format of file to control exports from libraries, and how to pass them to
 # the compiler. For export_fmt @0@ is the path to the file export file.
 export_file_format = 'gnu'
