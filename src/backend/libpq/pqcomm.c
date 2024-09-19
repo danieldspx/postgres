@@ -53,6 +53,8 @@
  *------------------------
  */
 #include "postgres.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 #ifdef HAVE_POLL_H
 #include <poll.h>
@@ -73,6 +75,9 @@
 #include <mstcpip.h>
 #endif
 
+#include "msquic/msquic_posix.h"
+#include "msquic/quic_sal_stub.h"
+#include "msquic/msquic.h"
 #include "common/ip.h"
 #include "libpq/libpq.h"
 #include "miscadmin.h"
@@ -162,6 +167,59 @@ static const PQcommMethods PqCommSocketMethods = {
 const PQcommMethods *PqCommMethods = &PqCommSocketMethods;
 
 WaitEventSet *FeBeWaitSet;
+
+//
+// The (optional) registration configuration for the app. This sets a name for
+// the app (used for persistent storage and for debugging). It also configures
+// the execution profile, using the default "low latency" profile.
+//
+const QUIC_REGISTRATION_CONFIG RegConfig = { "quicsample", QUIC_EXECUTION_PROFILE_LOW_LATENCY };
+
+//
+// The protocol name used in the Application Layer Protocol Negotiation (ALPN).
+//
+const QUIC_BUFFER Alpn = { sizeof("sample") - 1, (uint8_t*)"sample" };
+
+//
+// The UDP port used by the server side of the protocol.
+//
+const uint16_t UdpPort = 4567;
+
+//
+// The default idle timeout period (1 second) used for the protocol.
+//
+const uint64_t IdleTimeoutMs = 1000000;
+
+//
+// The length of buffer sent over the streams in the protocol.
+//
+const uint32_t SendBufferLength = 100;
+
+//
+// The QUIC API/function table returned from MsQuicOpen2. It contains all the
+// functions called by the app to interact with MsQuic.
+//
+const QUIC_API_TABLE* MsQuic;
+
+//
+// The QUIC handle to the configuration object. This object abstracts the
+// connection configuration. This includes TLS configuration and any other
+// QUIC layer settings.
+//
+HQUIC Configuration;
+
+//
+// The QUIC handle to the registration object. This is the top level API object
+// that represents the execution context for all work done by MsQuic on behalf
+// of the app.
+//
+HQUIC Registration;
+
+
+// Client Variables
+HQUIC ClientConnection = NULL;
+
+QUIC_TLS_SECRETS ClientSecrets = {0};
 
 
 /* --------------------------------
@@ -291,6 +349,242 @@ socket_close(int code, Datum arg)
 		 */
 		MyProcPort->sock = PGINVALID_SOCKET;
 	}
+}
+
+//
+// Helper function to convert a hex character to its decimal value.
+//
+uint8_t
+DecodeHexChar(
+    _In_ char c
+    )
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return 10 + c - 'A';
+    if (c >= 'a' && c <= 'f') return 10 + c - 'a';
+    return 0;
+}
+
+//
+// Helper function to convert a string of hex characters to a byte buffer.
+//
+uint32_t
+DecodeHexBuffer(
+    _In_z_ const char* HexBuffer,
+    _In_ uint32_t OutBufferLen,
+    _Out_writes_to_(OutBufferLen, return)
+        uint8_t* OutBuffer
+    )
+{
+    uint32_t HexBufferLen = (uint32_t)strlen(HexBuffer) / 2;
+    if (HexBufferLen > OutBufferLen) {
+        return 0;
+    }
+
+    for (uint32_t i = 0; i < HexBufferLen; i++) {
+        OutBuffer[i] =
+            (DecodeHexChar(HexBuffer[i * 2]) << 4) |
+            DecodeHexChar(HexBuffer[i * 2 + 1]);
+    }
+
+    return HexBufferLen;
+}
+
+
+typedef struct QUIC_CREDENTIAL_CONFIG_HELPER {
+    QUIC_CREDENTIAL_CONFIG CredConfig;
+    union {
+        QUIC_CERTIFICATE_HASH CertHash;
+        QUIC_CERTIFICATE_HASH_STORE CertHashStore;
+        QUIC_CERTIFICATE_FILE CertFile;
+        QUIC_CERTIFICATE_FILE_PROTECTED CertFileProtected;
+    };
+} QUIC_CREDENTIAL_CONFIG_HELPER;
+
+//
+// Helper function to load a server configuration. Uses the command line
+// arguments to load the credential part of the configuration.
+//
+bool ServerLoadConfiguration() {
+    QUIC_SETTINGS Settings = {0};
+    //
+    // Configures the server's idle timeout.
+    //
+    Settings.IdleTimeoutMs = IdleTimeoutMs;
+    Settings.IsSet.IdleTimeoutMs = TRUE;
+    //
+    // Configures the server's resumption level to allow for resumption and
+    // 0-RTT.
+    //
+    Settings.ServerResumptionLevel = QUIC_SERVER_RESUME_AND_ZERORTT;
+    Settings.IsSet.ServerResumptionLevel = TRUE;
+    //
+    // Configures the server's settings to allow for the peer to open a single
+    // bidirectional stream. By default connections are not configured to allow
+    // any streams from the peer.
+    //
+    Settings.PeerBidiStreamCount = 1;
+    Settings.IsSet.PeerBidiStreamCount = TRUE;
+
+    QUIC_CREDENTIAL_CONFIG_HELPER Config;
+    memset(&Config, 0, sizeof(Config));
+    Config.CredConfig.Flags = QUIC_CREDENTIAL_FLAG_NONE;
+
+    const char* Cert = "/home/daniel.pereira/Documents/UFSM/tcc/msquic/standalone-sample/build/server.cert";
+    const char* KeyFile = "/home/daniel.pereira/Documents/UFSM/tcc/msquic/standalone-sample/build/server.key";
+
+ //    if (Cert != NULL) {
+ //        //
+ //        // Load the server's certificate from the default certificate store,
+ //        // using the provided certificate hash.
+ //        //
+ //        uint32_t CertHashLen =
+ //            DecodeHexBuffer(
+ //                Cert,
+ //                sizeof(Config.CertHash.ShaHash),
+ //                Config.CertHash.ShaHash);
+ //        if (CertHashLen != sizeof(Config.CertHash.ShaHash)) {
+ //            return false;
+ //        }
+ //        Config.CredConfig.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_HASH;
+ //        Config.CredConfig.CertificateHash = &Config.CertHash;
+	// } else if (Cert != NULL && KeyFile != NULL) {
+        //
+        // Loads the server's certificate from the file.
+        //
+        // const char* Password = GetValue(argc, argv, "password");
+        // if (Password != NULL) {
+        //     Config.CertFileProtected.CertificateFile = (char*)Cert;
+        //     Config.CertFileProtected.PrivateKeyFile = (char*)KeyFile;
+        //     Config.CertFileProtected.PrivateKeyPassword = (char*)Password;
+        //     Config.CredConfig.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_FILE_PROTECTED;
+        //     Config.CredConfig.CertificateFileProtected = &Config.CertFileProtected;
+        // } else {
+		Config.CertFile.CertificateFile = (char*)Cert;
+		Config.CertFile.PrivateKeyFile = (char*)KeyFile;
+		Config.CredConfig.Type = QUIC_CREDENTIAL_TYPE_CERTIFICATE_FILE;
+		Config.CredConfig.CertificateFile = &Config.CertFile;
+        /* } */
+
+    // } else {
+    //     printf("Must specify ['-cert_hash'] or ['cert_file' and 'key_file' (and optionally 'password')]!\n");
+    //     return false;
+    // }
+
+    //
+    // Allocate/initialize the configuration object, with the configured ALPN
+    // and settings.
+    //
+    QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+    if (QUIC_FAILED(Status = MsQuic->ConfigurationOpen(Registration, &Alpn, 1, &Settings, sizeof(Settings), NULL, &Configuration))) {
+        printf("ConfigurationOpen failed, 0x%x!\n", Status);
+        return false;
+    }
+
+    //
+    // Loads the TLS credential part of the configuration.
+    //
+	printf("Loaded Server 4\n");
+    if (QUIC_FAILED(Status = MsQuic->ConfigurationLoadCredential(Configuration, &Config.CredConfig))) {
+        printf("ConfigurationLoadCredential failed, 0x%x!\n", Status);
+        return false;
+    }
+
+	printf("Loaded Server Config\n");
+
+    return true;
+}
+
+void CloseQuicConnection() {
+	if (MsQuic != NULL) {
+		if (Configuration != NULL) {
+			MsQuic->ConfigurationClose(Configuration);
+		}
+		if (Registration != NULL) {
+			//
+			// This will block until all outstanding child objects have been
+			// closed.
+			//
+			MsQuic->RegistrationClose(Registration);
+		}
+		MsQuicClose(MsQuic);
+	}
+}
+
+void CloseQuicListener(HQUIC Listener) {
+	if (Listener != NULL) {
+        MsQuic->ListenerClose(Listener);
+    }
+}
+
+/**
+ * Opens the MsQuic if not already open and set up the listener for a connection
+ * Returns the QUIC Configuration
+ */
+HQUIC SetupQuiServerConnectionListener(unsigned short portNumber, HQUIC* listenerCallback) {
+	QUIC_STATUS Status = QUIC_STATUS_SUCCESS;
+
+	printf("SetupQuiServerConnectionListener\n");
+
+	if (MsQuic == NULL) {
+		//
+		// Open a handle to the library and get the API function table.
+		//
+		if (QUIC_FAILED(Status = MsQuicOpen2(&MsQuic))) {
+			printf("MsQuicOpen2 failed, 0x%x!\n", Status);
+			CloseQuicConnection();
+			return NULL;
+		}
+
+		//
+		// Create a registration for the app's connections.
+		//
+		if (QUIC_FAILED(Status = MsQuic->RegistrationOpen(&RegConfig, &Registration))) {
+			printf("RegistrationOpen failed, 0x%x!\n", Status);
+			CloseQuicConnection();
+			return NULL;
+		}
+	}
+
+    HQUIC Listener = NULL;
+
+    //
+    // Configures the address used for the listener to listen on all IP
+    // addresses and the given UDP port.
+    //
+    QUIC_ADDR Address = {0};
+    QuicAddrSetFamily(&Address, QUIC_ADDRESS_FAMILY_UNSPEC);
+    QuicAddrSetPort(&Address, UdpPort);
+
+    //
+    // Load the server configuration based on the command line.
+    //
+    if (!ServerLoadConfiguration()) {
+		printf("Could not load Server configuration\n");
+        return NULL;
+    }
+
+    //
+    // Create/allocate a new listener object.
+    //
+    if (QUIC_FAILED(Status = MsQuic->ListenerOpen(Registration, listenerCallback, NULL, &Listener))) {
+        printf("ListenerOpen failed, 0x%x!\n", Status);
+        CloseQuicListener(Listener);
+		return NULL;
+    }
+
+    //
+    // Starts listening for incoming connections.
+    //
+    if (QUIC_FAILED(Status = MsQuic->ListenerStart(Listener, &Alpn, 1, &Address))) {
+        printf("ListenerStart failed, 0x%x!\n", Status);
+        CloseQuicListener(Listener);
+		return NULL;
+    }
+
+    printf("QUIC Listening...\n");
+
+	return Configuration;
 }
 
 

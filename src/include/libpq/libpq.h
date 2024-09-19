@@ -19,6 +19,9 @@
 #include "lib/stringinfo.h"
 #include "libpq/libpq-be.h"
 #include "storage/latch.h"
+#include "msquic/msquic_posix.h"
+#include "msquic/quic_sal_stub.h"
+#include "msquic/msquic.h"
 
 
 /*
@@ -140,5 +143,15 @@ extern int	run_ssl_passphrase_command(const char *prompt, bool is_server_start,
 									   char *buf, int size);
 extern bool check_ssl_key_file_permissions(const char *ssl_key_file,
 										   bool isServerStart);
+
+/*
+ * MsQuic Structs and Functions
+ */
+
+extern const QUIC_API_TABLE* MsQuic;
+extern HQUIC Configuration;
+extern const uint32_t SendBufferLength;
+
+HQUIC SetupQuiServerConnectionListener(unsigned short portNumber, HQUIC* listenerCallback);
 
 #endif							/* LIBPQ_H */
