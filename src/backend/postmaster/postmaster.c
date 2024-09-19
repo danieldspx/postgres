@@ -65,6 +65,8 @@
 
 #include "postgres.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
@@ -190,13 +192,20 @@ typedef struct bkend
 
 static dlist_head BackendList = DLIST_STATIC_INIT(BackendList);
 
+
+
+ConnectionInfo* connections = NULL;
+int nConnections = 0;
+
+StreamEvent* streamEvents = NULL;
+int nStreamEvents;
+
+
 #ifdef EXEC_BACKEND
 static Backend *ShmemBackendArray;
 #endif
 
 BackgroundWorker *MyBgworkerEntry = NULL;
-
-
 
 /* The socket number we are listening for connections on */
 int			PostPortNumber = DEF_PGPORT;
@@ -426,6 +435,7 @@ static void BackendRun(Port *port) pg_attribute_noreturn();
 static void ExitPostmaster(int status) pg_attribute_noreturn();
 static int	ServerLoop(void);
 static int	BackendStartup(Port *port);
+static int	BackendStartupQUIC(StreamEvent *event);
 static int	ProcessStartupPacket(Port *port, bool ssl_done, bool gss_done);
 static void SendNegotiateProtocolVersion(List *unrecognized_protocol_options);
 static void processCancelRequest(Port *port, void *pkt);
@@ -587,6 +597,70 @@ HANDLE		PostmasterHandle;
 #define UNREFERENCED_PARAMETER(P) (void)(P)
 #endif
 
+ConnectionInfo* SaveConnection(HQUIC Connection) {
+	if (connections == NULL) {
+		connections = (ConnectionInfo*) malloc(sizeof(ConnectionInfo));
+		nConnections = 1;
+	} else {
+		nConnections++;
+		connections = realloc(connections, sizeof(ConnectionInfo) * nConnections);
+	}
+
+	ConnectionInfo* connectionInfo = &connections[nConnections - 1];
+	connectionInfo->Connection = Connection;
+	connectionInfo->nStreams = 0;
+	connectionInfo->connectionId = nConnections;
+	connectionInfo->streams = NULL;
+
+	return connectionInfo;
+}
+
+StreamEvent* SaveStreamEvent(HQUIC Connection, StreamInfo* streamInfo) {
+	if (streamEvents == NULL) {
+		streamEvents = (StreamEvent*) malloc(sizeof(StreamEvent));
+		nStreamEvents = 1;
+	} else {
+		nStreamEvents++;
+		streamEvents = (StreamEvent*) realloc(streamEvents, sizeof(StreamEvent) * nStreamEvents);
+	}
+
+	StreamEvent* event = &streamEvents[nStreamEvents - 1];
+
+	event->Connection = Connection;
+	event->Stream = streamInfo->Stream;
+	event->streamId = streamInfo->streamId;
+
+	return event;
+}
+
+StreamInfo* SaveStream(HQUIC Connection, HQUIC Stream) {
+	for (int i = 0; i < nConnections; i++) {
+		if (Connection != connections[i].Connection) {
+			printf("Could not find Connection\n");
+			continue;
+		}
+
+		ConnectionInfo* connInfo = &connections[i];
+		if (connInfo->streams == NULL) {
+			connInfo->streams = (StreamInfo*) malloc(sizeof(StreamInfo));
+			connInfo->nStreams = 1;
+		} else {
+			connInfo->nStreams++;
+			connInfo->streams = realloc(connInfo->streams, sizeof(StreamInfo) * connInfo->nStreams);
+		}
+		
+		StreamInfo* streamInfo = &connInfo->streams[connInfo->nStreams - 1];
+		streamInfo->Stream = Stream;
+		streamInfo->streamId = connInfo->nStreams;
+
+		
+
+		return streamInfo;
+	}
+
+	return NULL;
+}
+
 void DisplayBufferData(const QUIC_BUFFER* qbuffer, size_t bufferLength) {
   size_t dataLen = bufferLength - sizeof(QUIC_BUFFER);
   for (size_t i = 0; i < dataLen; i++) {
@@ -661,8 +735,7 @@ ServerStreamCallback(
         //
         // Data was received from the peer on the stream.
         //
-        printf("[strm][%p][%d] Data received: ", Stream, Event->RECEIVE.BufferCount);
-         
+        printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>[strm][%p][%d] Data received: ", Stream, Event->RECEIVE.BufferCount);
         DisplayBufferData(Event->RECEIVE.Buffers, Event->RECEIVE.TotalBufferLength);
         break;
     case QUIC_STREAM_EVENT_PEER_SEND_SHUTDOWN:
@@ -746,7 +819,9 @@ ServerConnectionCallback(
         // The peer has started/created a new stream. The app MUST set the
         // callback handler before returning.
         //
-        printf("[strm][%p] Peer started\n", Event->PEER_STREAM_STARTED.Stream);
+        printf(">>>>>>>>>>>>>>>>>>>>>>>>>>[strm][%p] Peer started\n", Event->PEER_STREAM_STARTED.Stream);
+		StreamInfo* info = SaveStream(Connection, Event->PEER_STREAM_STARTED.Stream);
+		SaveStreamEvent(Connection, info);
         MsQuic->SetCallbackHandler(Event->PEER_STREAM_STARTED.Stream, (void*)ServerStreamCallback, NULL);
         break;
     case QUIC_CONNECTION_EVENT_RESUMED:
@@ -786,6 +861,7 @@ switch (Event->Type) {
         // proceed, the server must provide a configuration for QUIC to use. The
         // app MUST set the callback handler before returning.
         //
+		SaveConnection(Event->NEW_CONNECTION.Connection);
         MsQuic->SetCallbackHandler(Event->NEW_CONNECTION.Connection, (void*)ServerConnectionCallback, NULL);
         Status = MsQuic->ConnectionSetConfiguration(Event->NEW_CONNECTION.Connection, Configuration);
         break;
@@ -1405,7 +1481,7 @@ PostmasterMain(int argc, char *argv[])
 	/**
 	 * Establish QUIC connection and listener
 	 */
-	// SetupQuiServerConnectionListener(4567, ServerListenerCallback);
+	SetupQuiServerConnectionListener(4567, ServerListenerCallback);
 
 	/*
 	 * Establish input sockets.
@@ -1997,15 +2073,18 @@ ServerLoop(void)
 
 			if (events[i].events & WL_SOCKET_ACCEPT)
 			{
+
 				Port	   *port;
 				ereport(LOG, (errmsg("[DANDEBUG] Conn Created")));
 				port = ConnCreate(events[i].fd);
 				if (port)
 				{
+					// port->event = &streamEvents[0];
+					// Meu proximo problema vai ser esse cara aqui
+					// -->BackendStartup
 					BackendStartup(port);
 
-					
-					ereport(LOG, (errmsg("[DANDEBUG] After Backend Startup - Will Close Stream %s")));
+					ereport(LOG, (errmsg("[DANDEBUG] After Backend Startup - Will Close Stream")));
 					/*
 					 * We no longer need the open socket or port structure in
 					 * this process
@@ -2014,6 +2093,16 @@ ServerLoop(void)
 					ConnFree(port);
 				}
 			}
+		}
+
+		for (int i = 0; i < nStreamEvents; i++)
+		{
+			printf("Evento encontrado\n");
+			// StreamEvent* event = &streamEvents[i];
+			// if (event)
+			// {
+			// 	BackendStartupQUIC(event);
+			// }
 		}
 
 		/* If we have lost the log collector, try to start a new one */
@@ -4328,6 +4417,133 @@ TerminateChildren(int signal)
 		signal_child(AutoVacPID, signal);
 	if (PgArchPID != 0)
 		signal_child(PgArchPID, signal);
+}
+
+/*
+ * BackendStartup -- start backend process
+ *
+ * returns: STATUS_ERROR if the fork failed, STATUS_OK otherwise.
+ *
+ * Note: if you change this code, also consider StartAutovacuumWorker.
+ */
+static int
+BackendStartupQUIC(StreamEvent *event)
+{
+	Backend    *bn;				/* for backend cleanup */
+	pid_t		pid;
+	ereport(LOG, (errmsg("[QUIC] Backend Startup")));
+	/*
+	 * Create backend data structure.  Better before the fork() so we can
+	 * handle failure cleanly.
+	 */
+	bn = (Backend *) malloc(sizeof(Backend));
+	if (!bn)
+	{
+		ereport(LOG,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("out of memory")));
+		return STATUS_ERROR;
+	}
+
+	/*
+	 * Compute the cancel key that will be assigned to this backend. The
+	 * backend will have its own copy in the forked-off process' value of
+	 * MyCancelKey, so that it can transmit the key to the frontend.
+	 */
+	if (!RandomCancelKey(&MyCancelKey))
+	{
+		free(bn);
+		ereport(LOG,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not generate random cancel key")));
+		return STATUS_ERROR;
+	}
+
+	bn->cancel_key = MyCancelKey;
+
+	/* Pass down canAcceptConnections state */
+	// port->canAcceptConnections = canAcceptConnections(BACKEND_TYPE_NORMAL);
+	int canAccept = canAcceptConnections(BACKEND_TYPE_NORMAL);
+	bn->dead_end = (canAccept != CAC_OK);
+
+	/*
+	 * Unless it's a dead_end child, assign it a child slot number
+	 */
+	if (!bn->dead_end)
+		bn->child_slot = MyPMChildSlot = AssignPostmasterChildSlot();
+	else
+		bn->child_slot = 0;
+
+	/* Hasn't asked to be notified about any bgworkers yet */
+	bn->bgworker_notify = false;
+
+#ifdef EXEC_BACKEND
+	ereport(LOG, (errmsg("[QUIC] EXEC BACKEND -- THIS NEEDS TO BE IMPLEMENTED, EXITING...")));
+	exit(1);
+	pid = backend_forkexec(NULL);
+#else							/* !EXEC_BACKEND */
+	pid = fork_process();
+	if (pid == 0)				/* child */
+	{
+		free(bn);
+
+		/* Detangle from postmaster */
+		InitPostmasterChild();
+
+		/* Close the postmaster's sockets */
+		ClosePostmasterPorts(false);
+
+		/* Perform additional initialization and collect startup packet */
+		// BackendInitialize(port);
+
+		/*
+		 * Create a per-backend PGPROC struct in shared memory. We must do
+		 * this before we can use LWLocks. In the !EXEC_BACKEND case (here)
+		 * this could be delayed a bit further, but EXEC_BACKEND needs to do
+		 * stuff with LWLocks before PostgresMain(), so we do it here as well
+		 * for symmetry.
+		 */
+		InitProcess();
+
+		/* And run the backend */
+		// BackendRun(port);
+	}
+#endif							/* EXEC_BACKEND */
+
+	if (pid < 0)
+	{
+		/* in parent, fork failed */
+		int			save_errno = errno;
+
+		if (!bn->dead_end)
+			(void) ReleasePostmasterChildSlot(bn->child_slot);
+		free(bn);
+		errno = save_errno;
+		// ereport(LOG,
+		// 		(errmsg("could not fork new process for connection: %m")));
+		// report_fork_failure_to_client(port, save_errno);
+		return STATUS_ERROR;
+	}
+
+	/* in parent, successful fork */
+	// ereport(LOG,
+	// 		(errmsg_internal("forked new backend, pid=%d socket=%d",
+	// 						 (int) pid, (int) port->sock)));
+	//
+	/*
+	 * Everything's been successful, it's safe to add this backend to our list
+	 * of backends.
+	 */
+	bn->pid = pid;
+	bn->bkend_type = BACKEND_TYPE_NORMAL;	/* Can change later to WALSND */
+	dlist_push_head(&BackendList, &bn->elem);
+
+#ifdef EXEC_BACKEND
+	if (!bn->dead_end)
+		ShmemBackendArrayAdd(bn);
+#endif
+
+	return STATUS_OK;
 }
 
 /*

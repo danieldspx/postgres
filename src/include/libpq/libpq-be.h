@@ -57,6 +57,9 @@ typedef struct
 #include "libpq/hba.h"
 #include "libpq/pqcomm.h"
 
+#include <msquic/msquic.h>
+#include <msquic/msquic_posix.h>
+#include <msquic/quic_sal_stub.h>
 
 typedef enum CAC_state
 {
@@ -143,6 +146,27 @@ typedef struct ClientConnectionInfo
  * code for possible later use with gai_strerror.
  */
 
+/*
+ * Structure for MsQUIC to keep track of connections 
+ */
+typedef struct {
+	int streamId;
+	HQUIC Stream; 
+} StreamInfo;
+
+typedef struct {
+	int connectionId;
+	int nStreams;
+	HQUIC Connection;
+	StreamInfo* streams;
+} ConnectionInfo;
+
+typedef struct {
+	HQUIC Connection;
+	HQUIC Stream;
+	int streamId;
+} StreamEvent;
+
 typedef struct Port
 {
 	pgsocket	sock;			/* File descriptor */
@@ -227,7 +251,14 @@ typedef struct Port
 	SSL		   *ssl;
 	X509	   *peer;
 #endif
+
+	/*
+	 * MsQUIC structures.
+	 */
+	StreamEvent *event;
 } Port;
+
+
 
 #ifdef USE_SSL
 /*

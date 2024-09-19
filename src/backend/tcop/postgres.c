@@ -4102,6 +4102,67 @@ PostgresSingleUserMain(int argc, char *argv[],
 	PostgresMain(dbname, username);
 }
 
+//
+// The server's callback for stream events from MsQuic.
+//
+_IRQL_requires_max_(DISPATCH_LEVEL)
+_Function_class_(QUIC_STREAM_CALLBACK)
+QUIC_STATUS
+QUIC_API
+ServerStreamCallbackProcess(
+    _In_ HQUIC Stream,
+    _In_opt_ void* Context,
+    _Inout_ QUIC_STREAM_EVENT* Event
+    )
+{
+    UNREFERENCED_PARAMETER(Context);
+    switch (Event->Type) {
+    case QUIC_STREAM_EVENT_START_COMPLETE:
+          printf("INSIDE BACKEND [strm][%p] Stream Start Complete: %ld\n", Stream, Event->START_COMPLETE.ID);
+          break;
+    case QUIC_STREAM_EVENT_SEND_COMPLETE:
+        //
+        // A previous StreamSend call has completed, and the context is being
+        // returned back to the app.
+        //
+        free(Event->SEND_COMPLETE.ClientContext);
+        // printf("[strm][%p] Data sent\n", Stream);
+        break;
+    case QUIC_STREAM_EVENT_RECEIVE:
+        //
+        // Data was received from the peer on the stream.
+        //
+        printf("INSIDE BACKEND [strm][%p][%d] Data received: ", Stream, Event->RECEIVE.BufferCount);
+        DisplayBufferData(Event->RECEIVE.Buffers, Event->RECEIVE.TotalBufferLength);
+        break;
+    case QUIC_STREAM_EVENT_PEER_SEND_SHUTDOWN:
+        //
+        // The peer gracefully shut down its send direction of the stream.
+        //
+        printf("INSIDE BACKEND [strm][%p] Peer shut down\n", Stream);
+        ServerSend(Stream);
+        break;
+    case QUIC_STREAM_EVENT_PEER_SEND_ABORTED:
+        //
+        // The peer aborted its send direction of the stream.
+        //
+        printf("INSIDE BACKEND [strm][%p] Peer aborted\n", Stream);
+        MsQuic->StreamShutdown(Stream, QUIC_STREAM_SHUTDOWN_FLAG_ABORT, 0);
+        break;
+    case QUIC_STREAM_EVENT_SHUTDOWN_COMPLETE:
+        //
+        // Both directions of the stream have been shut down and MsQuic is done
+        // with the stream. It can now be safely cleaned up.
+        //
+        printf("INSIDE BACKEND [strm][%p] All done\n", Stream);
+        MsQuic->StreamClose(Stream);
+        break;
+    default:
+        break;
+    }
+    return QUIC_STATUS_SUCCESS;
+}
+
 
 /* ----------------------------------------------------------------
  * PostgresMain
@@ -4419,6 +4480,8 @@ PostgresMain(const char *dbname, const char *username)
 
 	if (!ignore_till_sync)
 		send_ready_for_query = true;	/* initially, or after error */
+
+	// MsQuic->SetCallbackHandler(MyProcPort->event->Stream, (void*)ServerStreamCallbackProcess, NULL);
 
 	/*
 	 * Non-error queries loop here.
